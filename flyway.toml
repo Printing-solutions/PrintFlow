@@ -1,0 +1,34 @@
+databaseType = "PostgreSql"
+id = "8f48fd3f-ac4f-4f37-867c-542fce981d91"
+name = "PrintFlow_1"
+
+[flyway]
+callbackLocations = [ "filesystem:callbacks" ]
+locations = [ "filesystem:migrations" ]
+mixed = true
+outOfOrder = true
+schemaModelLocation = "schema-model"
+validateMigrationNaming = true
+
+[flywayDesktop]
+enableMigrations = true
+showDeploymentDecision = true
+developmentEnvironment = "development"
+shadowEnvironment = "shadow"
+
+  [flywayDesktop.generate]
+  undoScripts = false
+
+[redgateCompare]
+filterFile = "filter.rgf"
+
+[redgateCompare.postgresql.options.behavior]
+detectRenames = "identical-only"
+
+[redgateCompare.postgresql.options.ignores]
+ignoreNewlinesInTextObjects = "off"
+
+[environments.PrintFlow_1]
+url = "jdbc:postgresql://localhost:5432/PrintFlow_1"
+schemas = [ "public" ]
+displayName = "PrintFlow_1"
