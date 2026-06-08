@@ -1,6 +1,8 @@
+
+
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
- 
+
 CREATE TABLE users (
     id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     user_id                 UUID UNIQUE NOT NULL DEFAULT uuid_generate_v4(),
@@ -23,3 +25,14 @@ CREATE TABLE users (
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+COMMENT ON TABLE users IS
+    'Master identity table for all PrintFlow users regardless of role or auth method.';
+COMMENT ON COLUMN users.auth_provider IS
+    'email = password-based account, google = Google OAuth account.';
+COMMENT ON COLUMN users.google_id IS
+    'Google subject ID returned by OAuth. NULL for email-based accounts.';
+COMMENT ON COLUMN users.password_hash IS
+    'bcrypt hash of password. NULL for Google OAuth accounts.';
+COMMENT ON COLUMN users.locked_until IS
+    'Account locked until this timestamp after 5 failed login attempts. NULL = not locked.';
