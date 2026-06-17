@@ -140,7 +140,7 @@ BEGIN
     RETURNING users.user_id INTO out_user_id;
 
     out_status  := 'SUCCESSFUL';
-    -- FIX: was 'Please verigy your email.'
+   
     out_message := 'Account created. Please verify your email.';
 END;
 $$;
