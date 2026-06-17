@@ -18,7 +18,9 @@ DROP FUNCTION IF EXISTS sp_set_mfa_status(UUID, BOOLEAN);
 DROP FUNCTION IF EXISTS sp_get_google_user(VARCHAR);
 
 
-CREATE OR REPLACE PROCEDURE email_exists(      --check type
+
+
+CREATE OR REPLACE PROCEDURE email_exists(
     IN  p_email             VARCHAR(255),
     OUT f_email_exists      BOOLEAN,
     OUT f_auth_provider     VARCHAR(20),
@@ -39,18 +41,20 @@ BEGIN
       AND u.is_active = TRUE;
 
     IF f_email_exists IS NULL THEN
-        f_email_exists    := FALSE;
-        f_auth_provider   := NULL;
-        f_message         := 'Email not found.';
+        f_email_exists  := FALSE;
+        f_auth_provider := NULL;
+        f_message       := 'Email not found.';
     ELSE
-        f_message := 'Email already registered as f' || f_auth_provider || '.';
+        f_message := 'Email already registered as ' || f_auth_provider || '.';
     END IF;
 END;
 $$;
 
 
 
-CREATE OR REPLACE PROCEDURE create_user_email(    --create type
+
+
+CREATE OR REPLACE PROCEDURE create_user_email(
     IN  p_email         VARCHAR(255),
     IN  p_password_hash VARCHAR(255),
     OUT out_status      VARCHAR(20),
@@ -62,7 +66,7 @@ SECURITY DEFINER
 AS $$
 BEGIN
     IF EXISTS (
-        SELECT a FROM users
+        SELECT 1 FROM users
         WHERE email = LOWER(TRIM(p_email))
     ) THEN
         out_status  := 'ERROR';
@@ -96,7 +100,9 @@ $$;
 
 
 
-CREATE OR REPLACE PROCEDURE create_user_google(    --create type
+
+
+CREATE OR REPLACE PROCEDURE create_user_google(
     IN  p_email         VARCHAR(255),
     OUT out_status      VARCHAR(20),
     OUT out_message     TEXT,
@@ -107,7 +113,7 @@ SECURITY DEFINER
 AS $$
 BEGIN
     IF EXISTS (
-        SELECT a FROM users
+        SELECT 1 FROM users
         WHERE email = LOWER(TRIM(p_email))
     ) THEN
         out_status  := 'ERROR';
@@ -134,13 +140,15 @@ BEGIN
     RETURNING users.user_id INTO out_user_id;
 
     out_status  := 'SUCCESSFUL';
-    out_message := 'Account created. Please verigy your email.';
+    -- FIX: was 'Please verigy your email.'
+    out_message := 'Account created. Please verify your email.';
 END;
 $$;
 
 
 
-CREATE OR REPLACE PROCEDURE generate_otp(    -- create type
+
+CREATE OR REPLACE PROCEDURE generate_otp(
     IN  p_email             VARCHAR(255),
     IN  p_purpose           VARCHAR(20),
     OUT out_status          VARCHAR(20),
@@ -168,10 +176,10 @@ BEGIN
 
     IF v_blocked_until IS NOT NULL
        AND v_blocked_until > CURRENT_TIMESTAMP THEN
-        out_status      := 'BLOCKED';
-        out_message     := 'You have requested too many codes. Please try again after 30 minutes.';
-        out_otp         := NULL;
-        out_expires     := v_blocked_until;
+        out_status  := 'BLOCKED';
+        out_message := 'You have requested too many codes. Please try again after 30 minutes.';
+        out_otp     := NULL;
+        out_expires := v_blocked_until;
         RETURN;
     END IF;
 
@@ -180,6 +188,8 @@ BEGIN
     WHERE  email   = LOWER(TRIM(p_email))
       AND  purpose = p_purpose
       AND  is_used = FALSE;
+
+
     v_otp := LPAD(FLOOR(RANDOM() * 1000000)::TEXT, 6, '0');
 
     IF p_purpose = 'registration' THEN
@@ -187,6 +197,7 @@ BEGIN
     ELSE
         v_expires := CURRENT_TIMESTAMP + INTERVAL '5 minutes';
     END IF;
+
 
     IF v_resend_count IS NULL THEN
         v_resend_count := 1;
@@ -206,25 +217,27 @@ BEGIN
         v_otp,
         p_purpose,
         v_resend_count,
-        IF v_resend_count >= 5 THEN
-            CURRENT_TIMESTAMP + INTERVAL '30 minutes'
-        ELSE
-            NULL
+        CASE
+            WHEN v_resend_count >= 5
+            THEN CURRENT_TIMESTAMP + INTERVAL '30 minutes'
+            ELSE NULL
         END,
         v_expires
     );
 
-    out_status     := 'SUCCESS';
-    out_message    := 'OTP generated and sent.';
-    out_otp        := v_otp;
-    out_expires    := v_expires;
+    out_status  := 'SUCCESS';
+    out_message := 'OTP generated and sent.';
+    out_otp     := v_otp;
+    out_expires := v_expires;
 END;
 $$;
 
 
 
 
-CREATE OR REPLACE PROCEDURE verify_otp(    --check and update type
+
+
+CREATE OR REPLACE PROCEDURE verify_otp(
     IN  p_email     VARCHAR(255),
     IN  p_otp_code  VARCHAR(6),
     IN  p_purpose   VARCHAR(20),
@@ -245,14 +258,12 @@ BEGIN
     ORDER BY created_at DESC
     LIMIT 1;
 
-   
     IF v_rec IS NULL THEN
-        out_status  := 'NOT FOUND';
+        out_status  := 'NOT_FOUND';
         out_message := 'No active OTP found. Please request a new one.';
         RETURN;
     END IF;
 
-    
     IF v_rec.expires_at < CURRENT_TIMESTAMP THEN
         UPDATE otp_verifications
         SET    is_used = TRUE
@@ -262,24 +273,21 @@ BEGIN
         RETURN;
     END IF;
 
-   
     IF v_rec.attempt_count >= 10 THEN
         UPDATE otp_verifications
         SET    is_used = TRUE
         WHERE  otp_id = v_rec.otp_id;
-        out_status  := 'SESSION EXPIRED';
+        out_status  := 'SESSION_EXPIRED';
         out_message := 'Too many failed attempts. Your session has expired.';
         RETURN;
     END IF;
 
-    
     IF v_rec.attempt_count >= 5 THEN
         out_status  := 'RESEND_REQUIRED';
         out_message := 'Too many incorrect attempts. Please request a new code.';
         RETURN;
     END IF;
 
-   
     IF v_rec.otp_code != p_otp_code THEN
         UPDATE otp_verifications
         SET    attempt_count = attempt_count + 1
@@ -289,10 +297,10 @@ BEGIN
         RETURN;
     END IF;
 
-  
     UPDATE otp_verifications
     SET    is_used = TRUE
     WHERE  otp_id = v_rec.otp_id;
+
     out_status  := 'SUCCESS';
     out_message := 'Verification successful.';
 END;
@@ -300,7 +308,9 @@ $$;
 
 
 
-CREATE OR REPLACE PROCEDURE activate_account(   --update type
+
+
+CREATE OR REPLACE PROCEDURE activate_account(
     IN  p_email     VARCHAR(255),
     OUT out_status  VARCHAR(20),
     OUT out_message TEXT
@@ -330,7 +340,8 @@ $$;
 
 
 
-CREATE OR REPLACE PROCEDURE validate_login(    --check type
+
+CREATE OR REPLACE PROCEDURE validate_login(
     IN  p_email         VARCHAR(255),
     IN  p_password_hash VARCHAR(255),
     OUT out_status      VARCHAR(20),
@@ -344,14 +355,12 @@ AS $$
 DECLARE
     v_user users%ROWTYPE;
 BEGIN
-    
     SELECT * INTO v_user
     FROM   users
     WHERE  email         = LOWER(TRIM(p_email))
       AND  auth_provider = 'email'
       AND  is_active     = TRUE;
 
-    
     IF v_user IS NULL THEN
         out_status      := 'INVALID';
         out_message     := 'Incorrect email address or password.';
@@ -360,7 +369,6 @@ BEGIN
         RETURN;
     END IF;
 
-    
     IF NOT v_user.is_email_verified THEN
         out_status      := 'UNVERIFIED';
         out_message     := 'Please verify your email address before logging in.';
@@ -369,7 +377,6 @@ BEGIN
         RETURN;
     END IF;
 
-    
     IF v_user.locked_until IS NOT NULL
        AND v_user.locked_until > CURRENT_TIMESTAMP THEN
         out_status      := 'LOCKED';
@@ -379,17 +386,25 @@ BEGIN
         RETURN;
     END IF;
 
-    
     IF v_user.password_hash <> p_password_hash THEN
-        CALL sp_record_failed_login(v_user.user_id);
+
+        CALL record_failed_login(v_user.user_id);
         out_status      := 'INVALID';
         out_message     := 'Incorrect email address or password.';
         out_user_id     := NULL;
         out_mfa_enabled := FALSE;
         RETURN;
     END IF;
+
+    
+    CALL clear_failed_logins(v_user.user_id);
+    out_status      := 'SUCCESS';
+    out_message     := 'Login successful.';
+    out_user_id     := v_user.user_id;
+    out_mfa_enabled := v_user.mfa_enabled;
 END;
 $$;
+
 
 
 
@@ -413,6 +428,7 @@ BEGIN
     WHERE user_id = p_user_id;
 END;
 $$;
+
 
 
 
@@ -478,6 +494,8 @@ $$;
 
 
 
+
+
 CREATE OR REPLACE PROCEDURE update_profile(
     IN  p_user_id      UUID,
     IN  p_first_name   VARCHAR(100),
@@ -497,7 +515,7 @@ BEGIN
            profile_completed = TRUE,
            updated_at        = CURRENT_TIMESTAMP
     WHERE  user_id   = p_user_id
-    AND  is_active = TRUE;
+      AND  is_active = TRUE;
 
     IF NOT FOUND THEN
         out_status  := 'NOT_FOUND';
@@ -509,6 +527,8 @@ BEGIN
     out_message := 'Profile updated successfully.';
 END;
 $$;
+
+
 
 
 
@@ -532,7 +552,7 @@ BEGIN
     SET    account_type = p_account_type,
            updated_at   = CURRENT_TIMESTAMP
     WHERE  user_id   = p_user_id
-    AND  is_active = TRUE;
+      AND  is_active = TRUE;
 
     IF NOT FOUND THEN
         out_status  := 'NOT_FOUND';
@@ -544,6 +564,9 @@ BEGIN
     out_message := 'Account role updated to: ' || p_account_type || '.';
 END;
 $$;
+
+
+
 
 
 
@@ -561,7 +584,7 @@ BEGIN
     SET    mfa_enabled = p_enabled,
            updated_at  = CURRENT_TIMESTAMP
     WHERE  user_id   = p_user_id
-    AND  is_active = TRUE;
+      AND  is_active = TRUE;
 
     IF NOT FOUND THEN
         out_status  := 'NOT_FOUND';
@@ -569,18 +592,20 @@ BEGIN
         RETURN;
     END IF;
 
-    out_status  := 'SUCCESS';
+    out_status := 'SUCCESS';
+
     IF p_enabled THEN
-        out_message:= 'Two-factor authentication has been enabled.'
-    ELSE 
-        out_message:= 'Two-factor authentication has been disabled.'
-    END;
+        out_message := 'Two-factor authentication has been enabled.';
+    ELSE
+        out_message := 'Two-factor authentication has been disabled.';
+    END IF;
 END;
 $$;
 
 
 
-CREATE OR REPLACE PROCEDURE get_google_user(    --check type
+
+CREATE OR REPLACE PROCEDURE get_google_user(
     IN  p_google_id               VARCHAR(255),
     OUT out_status                VARCHAR(20),
     OUT out_message               TEXT,
